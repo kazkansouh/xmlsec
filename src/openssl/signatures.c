@@ -148,6 +148,19 @@ struct _xmlSecOpenSSLSignatureCtx {
 };
 
 
+/**************************************************************************
+ *
+ * Debug override for OpenSSL ECDSA signatures
+ *
+ *****************************************************************************/
+
+static const char* g_kinv = NULL;
+static const char* g_rp   = NULL;
+
+void xmlSecOpenSSLSignatureSetupECDA(const char* kinv, const char* rp) {
+  g_kinv = kinv;
+  g_rp   = rp;
+}
 
 /******************************************************************************
  *
@@ -938,6 +951,7 @@ xmlSecOpenSSLSignatureEcdsaSign(xmlSecOpenSSLSignatureCtxPtr ctx, xmlSecBufferPt
     xmlSecByte *outData;
     int res = -1;
     int ret;
+    BIGNUM* pkinv = NULL, *prp = NULL;
 
     xmlSecAssert2(ctx != NULL, -1);
     xmlSecAssert2(ctx->pKey != NULL, -1);
@@ -952,8 +966,17 @@ xmlSecOpenSSLSignatureEcdsaSign(xmlSecOpenSSLSignatureCtxPtr ctx, xmlSecBufferPt
         goto done;
     }
 
+    /* fill optional data */
+    if (g_kinv && g_rp) {
+      pkinv = BN_new();
+      prp = BN_new();
+
+      BN_dec2bn(&pkinv, g_kinv);
+      BN_dec2bn(&prp  , g_rp);
+    }
+
     /* sign */
-    sig = ECDSA_do_sign(ctx->dgst, ctx->dgstSize, ecKey);
+    sig = ECDSA_do_sign_ex(ctx->dgst, ctx->dgstSize, pkinv, prp, ecKey);
     if(sig == NULL) {
         xmlSecOpenSSLError("ECDSA_do_sign", NULL);
         goto done;
@@ -986,6 +1009,12 @@ done:
     }
     if(ecKey != NULL) {
         EC_KEY_free(ecKey);
+    }
+    if (pkinv != NULL) {
+      BN_free(pkinv);
+    }
+    if (prp != NULL) {
+      BN_free(prp);
     }
 
     /* done */
